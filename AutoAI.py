@@ -6,14 +6,17 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import seaborn as sns
-from PokerEngine.api.game import setup_config, start_poker
+from pypokerengine.api.game import setup_config, start_poker
 from officialAutoAI.NC_AutoAImodel import *
 from officialAutoAI.OC_AutoAImodel import *
 from officialAutoAI.RF_AutoAImodel import *
+from officialAutoAI.NC2_AutoAImodel import *
+
 
 
 # Create a function to run the poker game
 def run_poker_game():
+        
     max_round = int(max_round_entry.get())
     initial_stack = int(initial_stack_entry.get())
     small_blind_amount = int(small_blind_entry.get())
@@ -27,31 +30,16 @@ def run_poker_game():
     for name in player_names:
         algorithm = player_algorithms[name].get()
         if algorithm == "RF_AutoAImodel":
-            config.register_player(name, algorithm=RF_AutoAImodel())
+            config.register_player('RF', algorithm=RF_AutoAImodel())
         elif algorithm == "OC_AutoAImodel":
-            config.register_player(name, algorithm=OC_AutoAImodel())
+            config.register_player('OC', algorithm=OC_AutoAImodel())
         elif algorithm == "NC_AutoAImodel":
-            config.register_player(name, algorithm=NC_AutoAImodel())
-
+            config.register_player('NC', algorithm=NC_AutoAImodel())
+        elif algorithm == "NC2_AutoAImodel":
+            config.register_player('NC2', algorithm=NC2_AutoAImodel())
     game_result = start_poker(config, verbose=1)
+    print(game_result)
 
-    stack = {}
-    for player in game_result['players']:
-        stack[player['name']] = player['stack']
-
-    max_stack_player = max(game_result['players'], key=lambda x: x['stack'])
-    winner = max_stack_player['name']
-    winner_stack = max_stack_player['stack']
-
-    labels = [f"{player['name']} - {player_algorithms[player['name']].get()}" for player in game_result['players']]
-    values = list(stack.values())
-
-    plt.figure(figsize=(10, 6))
-    sns.barplot(x=values, y=labels, palette='viridis')
-    plt.xlabel('Stack Size')
-    plt.ylabel('Algorithm')
-    plt.title(f'Stack Size by Algorithm - Round {max_round}')
-    plt.show()
 
 
 def remove_algorithm_selection():
@@ -72,7 +60,7 @@ def show_algorithm_selection():
         player_name = "Player" + str(i)
         algorithm_label = tk.Label(frame, text=f"{player_name} Algorithm:",font=("Helvetica", 15, "bold"))
         algorithm_label.grid(row=i , column=0, columnspan=1)
-        algorithm_combobox = ttk.Combobox(frame, values=["RF_AutoAImodel", "OC_AutoAImodel", "NC_AutoAImodel"],font=("Helvetica", 15))
+        algorithm_combobox = ttk.Combobox(frame, values=["RF_AutoAImodel", "OC_AutoAImodel", "NC_AutoAImodel","NC2_AutoAImodel"],font=("Helvetica", 15))
         algorithm_combobox.set("RF_AutoAImodel")
         algorithm_combobox.grid(row=i, column=1,columnspan=1)
         player_algorithms[player_name] = algorithm_combobox
@@ -137,7 +125,7 @@ player_number_label.grid(row=3, column=0, sticky="e")
 player_number_entry = ttk.Entry(frame)
 player_number_entry.grid(row=3, column=1)
 
-note_label = ttk.Label(frame, text="Note: player number should be 2 to 4 players",font=("Helvetica", 10, "bold"))
+note_label = ttk.Label(frame, text="Note: player number should be 3 to 4 players",font=("Helvetica", 10, "bold"))
 note_label.grid(row=4, columnspan=2)
 
 show_button = ttk.Button(frame, text="Show Player Algorithms", command=show_algorithm_selection)

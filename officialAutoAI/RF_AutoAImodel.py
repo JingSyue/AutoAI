@@ -5,6 +5,7 @@ import json
 import joblib
 import tensorflow as tf
 from tensorflow import keras
+from testchart.chart import *
 
 
 class RF_AutoAImodel(BasePokerPlayer):  # Do not forget to make parent class as "BasePokerPlayer"
@@ -12,30 +13,39 @@ class RF_AutoAImodel(BasePokerPlayer):  # Do not forget to make parent class as 
     def declare_action(self, valid_actions, hole_card, round_state):
         # valid_actions format => [raise_action_info, call_action_info, fold_action_info]
         print("valid actions in RF: ",valid_actions)
+        if self.first_action==1:
+            self.get_position(round_state['next_player'])
+            self.first_action=self.first_action+1
+            
         action_predict= self.predict_action(valid_actions)
         action=action_predict['action']
         amount=action_predict['amount']
         print("action predict in rf")
+        print(self.game_data)
         return action, amount   # action returned here is sent to the poker engine
+
 
     def receive_game_start_message(self, game_info):
         self.game_data = np.zeros(15)
         self.game_data[10:16] = -1
         self.game_data[8]=0
         self.game_data[9]=1
+        self.set_players(game_info['player_num'])
         self.sb=game_info['rule']['small_blind_amount']
         self.in_chips=np.zeros(15)
+        self.ROUND_RESULT_CHART=Chart(game_info['player_num'],game_info['rule']['max_round'])
         #print("small blind: ",self.sb)
-        #print("game_data_from_old_rf: \n",self.game_data)
         return None
 
     def receive_round_start_message(self, round_count, hole_card, seats):
         #print("in RF_Auto receive_round_start_message hole card ",hole_card)
-        #covert suite and face 
+        #covert suite and face
+        self.first_action=1
         self.hand1=self.convert_suite_and_face(hole_card[0])
         self.hand2=self.convert_suite_and_face(hole_card[1])
         hands=[self.hand1,self.hand2]
         self.set_hands(hands)
+        self.set_hand_level(hands)
         return None
 
     def receive_street_start_message(self, street, round_state):  
@@ -67,9 +77,79 @@ class RF_AutoAImodel(BasePokerPlayer):  # Do not forget to make parent class as 
         self.game_data[8]=0
         self.game_data[9]=1
         self.in_chips=np.zeros(15)
+        self.first_action=0
+        if self.position==0:
+            self.ROUND_RESULT_CHART.round_result_chart(winners,round_state)
         return None
     
     #RF-------model------data------format----translation 
+    def set_players(self,player_count):
+        self.player_count=player_count
+        return None
+
+    def get_players(self):
+        return self.player_count
+    
+    def get_position(self,next_player_position):
+        #next player 0 1 2
+        #this player 2 0 1
+        if self.get_players()==3:
+            position_array=np.array([2,0,1])
+            self.position=position_array[next_player_position]
+            return position_array[next_player_position]
+        #next player 0 1 2 3
+        #this player 3 0 1 2
+        elif self.get_players()==4:
+            position_array=np.array([3,0,1,2])
+            self.position=position_array[next_player_position]
+            return position_array[next_player_position]
+        return 0
+    def set_hand_level(self,cards):
+        #You can change the hand level simply by changing the array value 
+        self.level_array = np.array([[1,1,2,2,3,3,3,3,3,3,3,3,3], 
+                                     [1,1,2,3,3,4,5,6,6,6,6,6,6], 
+                                     [2,2,1,3,4,4,5,6,6,6,6,6,6],
+                                     [3,3,3,2,4,4,5,6,6,6,6,6,6],
+                                     [4,4,4,4,2,4,4,5,6,6,6,6,6],
+                                     [4,5,5,5,5,3,4,5,5,6,6,6,6],
+                                     [4,6,6,5,5,5,3,4,5,6,6,6,6],
+                                     [4,6,6,6,6,5,5,4,4,5,6,6,6],
+                                     [4,6,6,6,6,6,5,5,4,4,5,6,6],
+                                     [4,6,6,6,6,6,6,6,5,4,5,6,6],
+                                     [5,6,6,6,6,6,6,6,6,6,4,5,6],
+                                     [5,6,6,6,6,6,6,6,6,6,6,4,6],
+                                     [5,6,6,6,6,6,6,6,6,6,6,6,4]])
+        #print("level array:\n",level_array)   
+        hand1=cards[0]
+        hand2=cards[1]
+        #hand face 1 trans to 14
+        if(hand1['face']==1):
+            hand1['face']=14
+        if(hand2['face']==1):
+            hand2['face']=14
+        #hand1 is random variable always bigger than hand2
+        if(cards[0]['face']>cards[1]['face']):
+            hand1=cards[0]
+            hand2=cards[1]
+        else:
+            hand1=cards[1]
+            hand2=cards[0]
+        #print("set_hand_level hand1,hand2:",hand1," ", hand2)
+        suit_same=0
+        if(hand1['suite']==hand2['suite']):
+            suit_same=1
+        self.level=self.set_level(hand1['face'],hand2['face'],suit_same)
+        #print("level from set_hand_level: ",self.level)
+        return None
+
+    def set_level(self,hand1,hand2,suit_same):
+        #find hand1 and hand2 in level array
+        if(suit_same):
+            level=self.level_array[14-hand1][14-hand2]
+        else:
+            level=self.level_array[14-hand2][14-hand1]
+        return level
+    
     def set_action(self,action):
         action_number=self.get_action(action)
         if np.count_nonzero(self.game_data == -1)!=0:
@@ -172,15 +252,20 @@ class RF_AutoAImodel(BasePokerPlayer):  # Do not forget to make parent class as 
         predict_action=valid_actions[1]
         action=self.predict()
         for valid_action in valid_actions:
+            if valid_action['action'] =="call":
+                self.to_call=valid_action['amount']
             if valid_action['action'] == action['action']:
                 predict_action=valid_action
                 break
         if predict_action['action']=='raise' and predict_action['amount']!=0:
-            predict_action={'action':'raise','amount':min(predict_action['amount']['max'],2*self.sb)}
+            if 5<=self.level<=6:
+                predict_action={'action':'raise','amount':min(predict_action['amount']['max'],self.to_call+2*self.sb)}
+            elif 3<=self.level<=4:
+                predict_action={'action':'raise','amount':min(predict_action['amount']['max'],self.to_call+3*self.sb)}
+            else:
+                predict_action={'action':'raise','amount':min(predict_action['amount']['max'],self.to_call+4*self.sb)}
             return predict_action
-        elif predict_action['action']=='check':
-            predict_action={'action':'call','amount':0}
-        elif predict_action['action']=='raise' and predict_action['amount']==0:
+        elif predict_action['action']=='raise' and predict_action['amount']==0:#all-in
             predict_action={'action':'raise','amount':predict_action['amount']['max']}
         else:
             predict_action=valid_action

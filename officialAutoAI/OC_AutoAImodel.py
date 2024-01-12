@@ -12,6 +12,7 @@ import sys
 import matplotlib.pyplot as plt
 import warnings
 import math
+from testchart.chart import *
 
 class OC_AutoAImodel(BasePokerPlayer):  # Do not forget to make parent class as "BasePokerPlayer"
     #  we define the logic to make an action through this method. (so this method would be the core of your AI)
@@ -25,11 +26,12 @@ class OC_AutoAImodel(BasePokerPlayer):  # Do not forget to make parent class as 
         action=action_predict['action']
         amount=action_predict['amount']
         print("action predict in old cnn")
-        #self.print_game_data()
+        self.print_game_data()
         return action, amount   # action returned here is sent to the poker engine
 
     def receive_game_start_message(self, game_info):
         self.set_players(game_info['player_num'])
+        self.ROUND_RESULT_CHART=Chart(self.get_players(),game_info['rule']['max_round'])
         self.sb=game_info['rule']['small_blind_amount']
         return None
 
@@ -69,6 +71,8 @@ class OC_AutoAImodel(BasePokerPlayer):  # Do not forget to make parent class as 
         return None
 
     def receive_round_result_message(self, winners, hand_info, round_state):
+        if self.position==0:
+            self.ROUND_RESULT_CHART.round_result_chart(winners,round_state)
         return None
     
     #data transformation
@@ -79,6 +83,7 @@ class OC_AutoAImodel(BasePokerPlayer):  # Do not forget to make parent class as 
         self.in_chips=np.zeros(4)# Old Cnn is for two players but 2 more for extention
         self.in_chips_level=np.zeros(4)
         self.strength=0
+        self.riverReceived=0
         self.chips_to_call=-1
         #noted that for multi players 1 v.s 1's blind order is set randomly
         return None
@@ -111,42 +116,44 @@ class OC_AutoAImodel(BasePokerPlayer):  # Do not forget to make parent class as 
 
 
         if predict_action['action']=='raise' and predict_action['amount']!=0:
-            if 8<=self.strength<=12:#all in
+            if 11<=self.strength<=12:#all in
                 predict_action={'action':'raise','amount':predict_action['amount']['max']}
-            elif 4<=self.strength<=7:
-                predict_action={'action':'raise','amount':min(self.to_call+3*self.sb,predict_action['amount']['max'])}
+            elif 4<=self.strength<=10:
+                predict_action={'action':'raise','amount':min(self.to_call+4*self.sb,predict_action['amount']['max'])}
             elif 2<=self.strength<=3:
-                predict_action={'action':'raise','amount':min(self.to_call+2*self.sb,predict_action['amount']['max'])}
+                predict_action={'action':'raise','amount':min(self.to_call+3*self.sb,predict_action['amount']['max'])}
             else:
-                predict_action={'action':'raise','amount':min(self.to_call+self.sb,predict_action['amount']['max'])}
+                predict_action={'action':'raise','amount':min(self.to_call+2*self.sb,predict_action['amount']['max'])}
             return predict_action
         
-        #call and check will see the amount to_call if to_call is too large then it will fold
+        
         elif predict_action['action']=='call': 
-            if self.strength==0 and self.to_call>8*self.sb:
-                predict_action={'action':'fold','amount':0}
-        else:
             predict_action=valid_action
 
         print("this is predict action",predict_action)
         return predict_action
         
     def predict(self):
-        with open('F:\\AutoAI\\OCmodel\\model.config', 'r') as text_file: #path
-            json_string = text_file.read()
-        model = Sequential()
-        model = model_from_json(json_string)
-        model.load_weights('F:\\AutoAI\\OCmodel\\model.weight', by_name=False) #path
-        # read my data
-        input=np.array(self.game_data)
-        X2 = input.astype('float32')  
-        X1 = X2.reshape(1,13,13,1)
-        predictions = model.predict(X1)
-        predict = np.argmax(predictions,1)
-        action_number = predict[0]
-        print("Old CNN predict number:",action_number)
-        predict_action=self.get_predict_action(action_number)
-        print("Old CNN predict action:",predict_action)
+        
+        if self.strength<3 and self.riverReceived==1:
+            predict_action={'action':'fold' ,"amount":0}
+            return predict_action
+        else:
+            with open('F:\\AutoAI\\OCmodel\\model.config', 'r') as text_file: #path
+                json_string = text_file.read()
+            model = Sequential()
+            model = model_from_json(json_string)
+            model.load_weights('F:\\AutoAI\\OCmodel\\model.weight', by_name=False) #path
+            # read my data
+            input=np.array(self.game_data)
+            X2 = input.astype('float32')  
+            X1 = X2.reshape(1,13,13,1)
+            predictions = model.predict(X1)
+            predict = np.argmax(predictions,1)
+            action_number = predict[0]
+            print("Old CNN predict number:",action_number)
+            predict_action=self.get_predict_action(action_number)
+            print("Old CNN predict action:",predict_action)
         return predict_action
     
     def get_predict_action(self,action):
@@ -233,14 +240,17 @@ class OC_AutoAImodel(BasePokerPlayer):  # Do not forget to make parent class as 
         self.store_to_game_data(turn,4)
         #print("game_data_from new_cnn after turn: ",self.game_data)
         cards=[self.hand1,self.hand2,self.flop1,self.flop2,self.flop3,self.turn]
+        self.get_highest_strength(cards)
         #print("strength from set turn: ",self.get_highest_strength(cards))
         return None
     
     def set_river(self,river):
         #print("old_cnn receive river from ai model: ",river)
+        self.riverReceived=1
         self.river=river
         self.store_to_game_data(river,5)
         cards=[self.hand1,self.hand2,self.flop1,self.flop2,self.flop3,self.turn,self.river]
+        self.get_highest_strength(cards)
         #print("strength from set river: ",self.get_highest_strength(cards))
         return None
 
@@ -253,6 +263,7 @@ class OC_AutoAImodel(BasePokerPlayer):  # Do not forget to make parent class as 
         self.store_to_game_data(flop2,2)
         self.store_to_game_data(flop3,3)
         cards=[self.hand1,self.hand2,self.flop1,self.flop2,self.flop3]
+        self.get_highest_strength(cards)
         #print("strength from set flops: ",self.get_highest_strength(cards))
         return None
     
@@ -361,6 +372,7 @@ class OC_AutoAImodel(BasePokerPlayer):  # Do not forget to make parent class as 
         #once you know the hands value you can update strength
         cards=[self.hand1,self.hand2]
         #print("strength from set hands: ",self.set_strength(cards))
+        self.get_highest_strength(cards)
         self.store_strength_to_game_data(self.set_strength(cards))
         return None
     

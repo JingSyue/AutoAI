@@ -1,4 +1,3 @@
-from pypokerengine.players import BasePokerPlayer
 import numpy as np
 import itertools
 import random
@@ -7,37 +6,31 @@ import joblib
 from keras.models import Sequential
 from keras.models import model_from_json
 import tensorflow as tf
+from pypokerengine.players import BasePokerPlayer
 from tensorflow import keras
-from store_data_set.data_set import *
 from testchart.chart import *
 
-
-
-class NC_AutoAImodel(BasePokerPlayer):  
+class NC2_AutoAImodel(BasePokerPlayer):  
     def declare_action(self, valid_actions, hole_card, round_state):
         # valid_actions format => [raise_action_info, call_action_info, fold_action_info]
         if self.first_action==1:
             self.set_blind_order(self.get_position(round_state['next_player']))
-        #print('save for ccn data',self.game_data)
         
         action_predict= self.predict_action(valid_actions)
         action=action_predict['action']
         amount=action_predict['amount']
-        print("action predict in new cnn")
+        print("action predict in new cnn 2")
         self.print_game_data()
         return action, amount   # action returned here is sent to the poker engine
 
     def receive_game_start_message(self, game_info):
-        self.model_name='NC'
         self.set_players(game_info['player_num'])
-        self.STORE_DATA_SET=Store_data_set(self.get_players())
         self.ROUND_RESULT_CHART=Chart(self.get_players(),game_info['rule']['max_round'])
         self.sb=game_info['rule']['small_blind_amount']
         return None
 
     def receive_round_start_message(self, round_count, hole_card, seats):
         self.new_game_data()
-        self.STORE_DATA_SET.store_data(self.game_data)
         self.first_action=1
         self.hand1=self._convert_suite_and_face(hole_card[0])
         self.hand2=self._convert_suite_and_face(hole_card[1])
@@ -69,7 +62,6 @@ class NC_AutoAImodel(BasePokerPlayer):
         amount = action['amount']
         self.set_player_action(action)
         self.set_player_chips(player_uuid,amount)
-        self.STORE_DATA_SET.store_data(self.game_data)
         return None
 
     def receive_round_result_message(self, winners, hand_info, round_state):
@@ -119,9 +111,7 @@ class NC_AutoAImodel(BasePokerPlayer):
             
         if self.get_action(action) == 8:  # action==fold
             self.set_fold_in_bs(index % self.get_players() + 1)
-            
-        
-
+        return None
 
     def set_fold_in_bs(self,player_number):
         self.game_data[11][3*player_number-2:3*player_number]=0
@@ -187,6 +177,7 @@ class NC_AutoAImodel(BasePokerPlayer):
         self.store_to_game_data(hands[1],7)
         #once you know the hands value you can update strength
         cards=[self.hand1,self.hand2]
+        self.get_highest_strength(cards)
         #print("strength from set hands: ",self.set_strength(cards))
         self.store_strength_to_game_data(self.set_strength(cards))
         #self.print_game_data()
@@ -300,7 +291,7 @@ class NC_AutoAImodel(BasePokerPlayer):
     def new_game_data(self): 
         self.game_data = np.full((12, 13), 0)
         #flop1,2,3,turn,river initial=-1 
-        self.game_data[0:8, :] = -1
+        self.game_data[1:6, :] = -1
         #action initial=-1
         self.game_data[10]=-1
         self.game_data[11]=-1
@@ -331,6 +322,7 @@ class NC_AutoAImodel(BasePokerPlayer):
         self.store_to_game_data(flop3,3)
         cards=[self.hand1,self.hand2,self.flop1,self.flop2,self.flop3]
         self.get_highest_strength(cards)
+        
         #print("strength from set flops: ",self.get_highest_strength(cards))
         return None
     
@@ -486,18 +478,12 @@ class NC_AutoAImodel(BasePokerPlayer):
         return predict_action
     
     def predict(self):
-        if self.get_players()==3:
-            with open('F:\\AutoAI\\NCmodel\\model-3p\\model3.config', 'r') as json_file: #path
+            
+        with open('F:\\AutoAI\\NCmodel\\model-3+4p\\model3+4.config', 'r') as json_file: #path
                 json_string = json_file.read()
-            model = Sequential()
-            model = model_from_json(json_string)
-            model.load_weights('F:\\AutoAI\\NCmodel\\model-3p\\model3.weight', by_name=False) #path
-        elif self.get_players()==4:
-            with open('F:\\AutoAI\\NCmodel\\model-4p\\model4.config', 'r') as json_file: #path
-                json_string = json_file.read()
-            model = Sequential()
-            model = model_from_json(json_string)
-            model.load_weights('F:\\AutoAI\\NCmodel\\model-4p\\model4.weight', by_name=False) #path
+        model = Sequential()
+        model = model_from_json(json_string)
+        model.load_weights('F:\\AutoAI\\NCmodel\\model-3+4p\\model3+4.weight', by_name=False) #path
         
         input=np.array(self.game_data)
         X2 = input.astype('float32')  
