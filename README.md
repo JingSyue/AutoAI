@@ -1,5 +1,7 @@
 <div align="center">
+
 [English](./README.en.md) | [简体中文](./README.zh-CN.md) | [العربية](./README.ar.md) | [Français](./README.fr.md) | [日本語](./README.ja.md)
+
 </div>
 <div align="center">
   <h1>AutoAI</h1>
@@ -8,7 +10,7 @@
   </a>
   <p>自動化AI德州撲克牌局</p>
   <p>
-    <a href="https://youtu.be/sFaKtDhwvUw?feature=shared">演示 Demo</a> / 
+    <a href="https://youtu.be/sFaKtDhwvUw?feature=shared">演示 Demo</a> 
   </p>
 </div>
 
